@@ -45,6 +45,7 @@ export default function ProductPage({ params }) {
         isOpen={isCustomizerOpen}
         onClose={() => setIsCustomizerOpen(false)}
         logoUrl={uploadedLogo}
+        setLogoUrl={setUploadedLogo}
         productImageUrl={productImageUrl}
       />
 

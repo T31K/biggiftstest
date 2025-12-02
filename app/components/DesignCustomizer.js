@@ -1,29 +1,115 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import axios from "axios";
+import { v4 as uuidv4 } from "uuid";
 
 export default function DesignCustomizer({
   isOpen,
   onClose,
   logoUrl,
   productImageUrl,
+  setLogoUrl, // Add setLogoUrl prop to update parent state
 }) {
   const [position, setPosition] = useState({ x: 100, y: 100 });
   const [size, setSize] = useState({ w: 150, h: 150 });
   const [showGuides, setShowGuides] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const isResizing = useRef(false);
   const startPos = useRef({ x: 0, y: 0 });
   const initialRect = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const hasRemovedBg = useRef(false); // Track if we've already removed BG for this session
 
   // Reset state when opening new logo
   useEffect(() => {
     if (isOpen) {
       setPosition({ x: 100, y: 100 });
       setSize({ w: 150, h: 150 });
+      hasRemovedBg.current = false; // Reset flag
     }
-  }, [isOpen, logoUrl]);
+  }, [isOpen]); // Only depend on isOpen toggle, NOT logoUrl
+
+  // Background Removal Function
+  const removeBg = async (currentLogoUrl) => {
+    if (currentLogoUrl && !hasRemovedBg.current) {
+      hasRemovedBg.current = true; // Mark as started
+
+      try {
+        setIsLoading(true);
+
+        // Convert data URL to Blob/File
+        const response = await fetch(currentLogoUrl);
+        const blob = await response.blob();
+        const file = new File([blob], `${uuidv4()}.png`, {
+          type: "image/png",
+        });
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const headers = {
+            headers: { "Content-Type": "multipart/form-data" },
+          };
+
+          const res = await axios.post(
+            "https://pfp.t31k.cloud/remove-bg",
+            formData,
+            headers
+          );
+
+          const { job_id } = res.data;
+
+          // Poll for result
+          const poll = async () => {
+            const statusRes = await axios.get(
+              `https://pfp.t31k.cloud/status/${job_id}`
+            );
+            const { status, result } = statusRes.data;
+
+            if (status === "done") {
+              const removedBgUrl = `data:image/png;base64,${result}`;
+
+              // Update the logo URL in the parent component
+              if (setLogoUrl) {
+                setLogoUrl(removedBgUrl);
+              }
+
+              setTimeout(() => setIsLoading(false), 1300);
+            } else if (status === "failed") {
+              console.error("Background removal failed");
+              setIsLoading(false);
+              // Optional: Show error toast here
+            } else {
+              setTimeout(poll, 2000);
+            }
+          };
+          poll();
+        } catch (err) {
+          console.error("Error removing background (API):", err);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error("Error preparing file:", err);
+        setIsLoading(false);
+      }
+    }
+  };
+
+  // Trigger BG removal ONLY when logoUrl changes and it's a new upload (starts with data:)
+  useEffect(() => {
+    if (
+      isOpen &&
+      logoUrl &&
+      logoUrl.startsWith("data:") &&
+      !hasRemovedBg.current
+    ) {
+      removeBg(logoUrl);
+    }
+  }, [logoUrl, isOpen]);
 
   useEffect(() => {
     const handleMouseMove = (e) => {
@@ -122,6 +208,18 @@ export default function DesignCustomizer({
               alt="Product"
               className="w-full h-full object-contain pointer-events-none select-none"
             />
+
+            {/* Loading Overlay */}
+            {isLoading && (
+              <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-20">
+                <div className="bg-white px-4 py-2 rounded shadow-lg flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm font-medium">
+                    Removing Background...
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Center Guides */}
             {showGuides && (
