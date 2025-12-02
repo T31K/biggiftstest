@@ -16,6 +16,7 @@ export default function DesignCustomizer({
   const [showGuides, setShowGuides] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [remark, setRemark] = useState(""); // Add remark state
+  const [logoColor, setLogoColor] = useState(null); // Add logoColor state
 
   const containerRef = useRef(null);
   const isDragging = useRef(false);
@@ -31,6 +32,7 @@ export default function DesignCustomizer({
       setSize({ w: 150, h: 150 });
       setShowGuides(false);
       setRemark(""); // Reset remark
+      setLogoColor(null); // Reset color
     }
   }, [isOpen]); // Only depend on isOpen toggle
 
@@ -68,6 +70,7 @@ export default function DesignCustomizer({
       });
 
       const resultUrl = removeBgRes.data.url;
+      console.log(resultUrl);
 
       // Update the logo URL in the parent component
       if (setLogoUrl) {
@@ -225,11 +228,29 @@ export default function DesignCustomizer({
               }}
               onMouseDown={handleDragStart}
             >
-              <img
-                src={logoUrl}
-                alt="Uploaded Logo"
-                className="w-full h-full object-contain pointer-events-none select-none"
-              />
+              {logoColor ? (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    backgroundColor: logoColor,
+                    maskImage: `url(${logoUrl})`,
+                    maskSize: "contain",
+                    maskRepeat: "no-repeat",
+                    maskPosition: "center",
+                    WebkitMaskImage: `url(${logoUrl})`,
+                    WebkitMaskSize: "contain",
+                    WebkitMaskRepeat: "no-repeat",
+                    WebkitMaskPosition: "center",
+                  }}
+                />
+              ) : (
+                <img
+                  src={logoUrl}
+                  alt="Uploaded Logo"
+                  className="w-full h-full object-contain pointer-events-none select-none"
+                />
+              )}
 
               {/* Resize Handle */}
               <div
@@ -244,20 +265,59 @@ export default function DesignCustomizer({
 
         {/* Footer / Tools */}
         <div className="p-6 border-t bg-white flex flex-col gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Add a Remark
-            </label>
-            <textarea
-              value={remark}
-              onChange={(e) => setRemark(e.target.value)}
-              placeholder="Enter any special instructions..."
-              className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-              rows={2}
-            />
+          <div className="grid grid-cols-2 gap-6">
+            {/* Color Picker */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Logo Color
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <input
+                    type="color"
+                    value={logoColor || "#000000"}
+                    onChange={(e) => setLogoColor(e.target.value)}
+                    className="w-10 h-10 p-0 border-0 rounded cursor-pointer"
+                    disabled={!logoColor}
+                  />
+                  {!logoColor && (
+                    <div className="absolute inset-0 bg-gray-100 flex items-center justify-center pointer-events-none border border-gray-300 rounded">
+                      <span className="text-xs text-gray-400">❌</span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!logoColor}
+                      onChange={(e) =>
+                        setLogoColor(e.target.checked ? "#000000" : null)
+                      }
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>One Color Print</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Remark */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Add a Remark
+              </label>
+              <textarea
+                value={remark}
+                onChange={(e) => setRemark(e.target.value)}
+                placeholder="Enter any special instructions..."
+                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                rows={2}
+              />
+            </div>
           </div>
 
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center pt-2 border-t border-gray-100">
             <p className="text-sm text-gray-500">
               Drag to move the logo. Drag the blue handle to resize.
             </p>
