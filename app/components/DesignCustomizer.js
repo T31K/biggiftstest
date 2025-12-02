@@ -15,87 +15,69 @@ export default function DesignCustomizer({
   const [size, setSize] = useState({ w: 150, h: 150 });
   const [showGuides, setShowGuides] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [remark, setRemark] = useState(""); // Add remark state
 
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const isResizing = useRef(false);
   const startPos = useRef({ x: 0, y: 0 });
   const initialRect = useRef({ x: 0, y: 0, w: 0, h: 0 });
-  const hasRemovedBg = useRef(false); // Track if we've already removed BG for this session
+  const processingUrl = useRef(null); // Track currently processing URL to prevent duplicates
 
   // Reset state when opening new logo
   useEffect(() => {
     if (isOpen) {
       setPosition({ x: 100, y: 100 });
       setSize({ w: 150, h: 150 });
-      hasRemovedBg.current = false; // Reset flag
+      setShowGuides(false);
+      setRemark(""); // Reset remark
     }
-  }, [isOpen]); // Only depend on isOpen toggle, NOT logoUrl
+  }, [isOpen]); // Only depend on isOpen toggle
 
   // Background Removal Function
   const removeBg = async (currentLogoUrl) => {
-    if (currentLogoUrl && !hasRemovedBg.current) {
-      hasRemovedBg.current = true; // Mark as started
+    try {
+      setIsLoading(true);
 
-      try {
-        setIsLoading(true);
+      // 1. Convert data URL to File
+      const response = await fetch(currentLogoUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `${uuidv4()}.png`, {
+        type: "image/png",
+      });
 
-        // Convert data URL to Blob/File
-        const response = await fetch(currentLogoUrl);
-        const blob = await response.blob();
-        const file = new File([blob], `${uuidv4()}.png`, {
-          type: "image/png",
-        });
+      // 2. Get Cloudflare Direct Upload URL
+      const cfRes = await axios.post("https://api.t31k.cloud/cloudflare");
+      const uploadURL = cfRes.data.url;
 
-        const formData = new FormData();
-        formData.append("file", file);
+      // 3. Upload to Cloudflare
+      const formData = new FormData();
+      formData.append("file", file);
 
-        try {
-          const headers = {
-            headers: { "Content-Type": "multipart/form-data" },
-          };
+      const uploadRes = await axios.post(uploadURL, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
-          const res = await axios.post(
-            "https://pfp.t31k.cloud/remove-bg",
-            formData,
-            headers
-          );
+      // Get public URL from Cloudflare response
+      // Cloudflare Images returns variants array. We'll take the first one (usually 'public' or 'default')
+      const publicImageURL = uploadRes.data.result.variants[0];
+      console.log(publicImageURL);
+      // 4. Send to Remove BG endpoint
+      const removeBgRes = await axios.post("https://api.t31k.cloud/remove-bg", {
+        url: publicImageURL,
+      });
 
-          const { job_id } = res.data;
+      const resultUrl = removeBgRes.data.url;
 
-          // Poll for result
-          const poll = async () => {
-            const statusRes = await axios.get(
-              `https://pfp.t31k.cloud/status/${job_id}`
-            );
-            const { status, result } = statusRes.data;
-
-            if (status === "done") {
-              const removedBgUrl = `data:image/png;base64,${result}`;
-
-              // Update the logo URL in the parent component
-              if (setLogoUrl) {
-                setLogoUrl(removedBgUrl);
-              }
-
-              setTimeout(() => setIsLoading(false), 1300);
-            } else if (status === "failed") {
-              console.error("Background removal failed");
-              setIsLoading(false);
-              // Optional: Show error toast here
-            } else {
-              setTimeout(poll, 2000);
-            }
-          };
-          poll();
-        } catch (err) {
-          console.error("Error removing background (API):", err);
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.error("Error preparing file:", err);
-        setIsLoading(false);
+      // Update the logo URL in the parent component
+      if (setLogoUrl) {
+        setLogoUrl(resultUrl);
       }
+
+      setTimeout(() => setIsLoading(false), 1300);
+    } catch (err) {
+      console.error("Error processing image:", err);
+      setIsLoading(false);
     }
   };
 
@@ -105,8 +87,9 @@ export default function DesignCustomizer({
       isOpen &&
       logoUrl &&
       logoUrl.startsWith("data:") &&
-      !hasRemovedBg.current
+      processingUrl.current !== logoUrl
     ) {
+      processingUrl.current = logoUrl;
       removeBg(logoUrl);
     }
   }, [logoUrl, isOpen]);
@@ -260,7 +243,20 @@ export default function DesignCustomizer({
         </div>
 
         {/* Footer / Tools */}
-        <div className="p-6 border-t bg-white">
+        <div className="p-6 border-t bg-white flex flex-col gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Add a Remark
+            </label>
+            <textarea
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              placeholder="Enter any special instructions..."
+              className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+              rows={2}
+            />
+          </div>
+
           <div className="flex justify-between items-center">
             <p className="text-sm text-gray-500">
               Drag to move the logo. Drag the blue handle to resize.
